@@ -1,52 +1,75 @@
-import psycopg2.extras
+import csv
+import glob
+import os
 
-hostname = 'localhost'
-database = 'mydb'
-username = 'postgres'
-pwd = '1234'
-port_id = 5432
-conn = None
+def search_row(tecRaw_file, bs_list_file):
+    with open(tecRaw_file) as tecRaw_in, open(bs_list_file, 'r') as bs_nums:
 
-try:
-    with psycopg2.connect(
-            host=hostname,
-            dbname=database,
-            user=username,
-            password=pwd,
-            port=port_id
-        ) as conn:
+        count = 0
+        temp_bs_list = []
+        temp_row_from_reader = []
+        temp_dict_EARFCN = dict()
 
-        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        for r in bs_nums:
+            temp_bs_list.append(r.strip())
+        print(f'номера бс: {temp_bs_list}')
 
-            cur.execute('DROP TABLE IF EXISTS employee')
+        for row in csv.reader(tecRaw_in, delimiter=','):
+            count += 1
+            if count > 383:
+                temp_row = row[0].split(';')[16]
+                if temp_row in temp_bs_list:
+                    temp_row_from_reader.append(*row)
 
-            create_script = """ CREATE TABLE IF NOT EXISTS employee (
-                                    id        int PRIMARY KEY,
-                                    name      varchar(40) NOT NULL,
-                                    salary    int,
-                                    dept_id   varchar(30)); """
-            cur.execute(create_script)
+        for i in temp_bs_list:
+            try:
+                os.mkdir(f'result_folder\{i}')
+            except FileExistsError:
+                pass
 
-            insert_script = 'INSERT INTO employee (id, name, salary, dept_id) VALUES (%s, %s, %s, %s)'
-            insert_values = [(1, 'James', 12000, 'D1'), (2, 'Robin', 15000, 'D1'), (3, 'Xavier', 12000, 'D2')]
-            for record in insert_values:
-                cur.execute(insert_script, record)
+        for i in temp_bs_list:
+            try:
+                with open(f'result_folder\{i}\{i}.txt', 'w') as temp_result_file:
 
-            update_script = 'UPDATE employee SET salary = salary + (salary * 0.5)'
-            cur.execute(update_script)
+                    for x in temp_row_from_reader:
+                        temp_x = x.split(';')
+                        if temp_x[16] == i:
+                            temp_dict_EARFCN[temp_x[9]] = temp_dict_EARFCN.get(temp_x[9], []) + [x]
 
-            delete_script = 'DELETE FROM employee WHERE name = %s'
-            delete_record = ('James',)
-            cur.execute(delete_script, delete_record)
+                    for k, v in temp_dict_EARFCN.items():
+                        min_v = -200
+                        temp_row_dict = ''
+                        for v1 in v:
+                            try:
+                                temp_v_dict = float(v1.split(';')[20])
+                                if temp_v_dict > min_v:
+                                    min_v = temp_v_dict
+                                    temp_row_dict = v1
+                            except ValueError:
+                                pass
+                        print(temp_row_dict, file=temp_result_file)
+                        temp_row_dict = ''
+                        min_v = -200
 
-            cur.execute('SELECT * FROM employee')
-            for record in cur.fetchall():
-                print(record['name'], record['salary'])
+                temp_dict_EARFCN.clear()
 
-            conn.commit()
+            except FileExistsError:
+                pass
 
-except Exception as error:
-    print(error)
-finally:
-    if conn is not None:
-        conn.close()
+
+export_file = glob.glob('source_folder\*.csv')
+bs_file = glob.glob('source_folder\*.txt')
+
+search_row(export_file[0], bs_file[0])
+
+# ['15.05.2023;15:10:29.969;1686820229;45.077795;39.015200;19.11;34.16;176.09;10;38750;2310000000;196;250;20;27013;59307298;231669;34;;7;-71.12;11.97;-94.97;-17.13;-16.43;239.37;0.000002054501;2233662;no;no;4;;20.0;']
+# [';;;;;;;;;;;;;;;;231669;34;;7;-71.12;11.97;-94.97;-17.13;-16.43;239.37;0.000002054501;2233662;no;no;4;;20.0;']
+# count ';' for num_bs
+
+#from datetime import datetime
+# time_now = f'{cur_time.day:02}_{cur_time.month:02}_{cur_time.year}__{cur_time.hour:02}_{cur_time.minute:02}_{cur_time.second:02}'
+#cur_time = datetime.now()
+
+#tecRaw_in.seek(520)
+
+#print(f'используемые файлы: {export_file}, {bs_file}')
